@@ -154,7 +154,7 @@ async function main() {
     }
 
     // eslint-disable-next-line max-len
-    const res = Object.values(state.boards).filter((b) => b.users.filter((obj:any) => user.id === obj.id));
+    const res = Object.values(state.boards).filter((b) => b.users.filter((obj:any) => user.id === obj.id).length);
 
     resp.json({
       boards: res.map((x) => ({ id: x.id, title: x.title })),
