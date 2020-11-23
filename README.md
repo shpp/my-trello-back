@@ -4,10 +4,10 @@
 1. `npm i`
 2. `npm start`
 
-api located on port 3000 by default, sample request:
+api located on port 5000 by default, sample request:
 
 ```
-curl -X POST -H 'Content-Type: application/json; charset=utf-8' --data '{"email": "rshmelev2@gmail.com","password":"123"}' localhost:3000/v1/user
+curl -X POST -H 'Content-Type: application/json; charset=utf-8' --data '{"email": "rshmelev2@gmail.com","password":"123"}' localhost:5000/v1/user
 ```
 
 should return:

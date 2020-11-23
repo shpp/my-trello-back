@@ -147,6 +147,22 @@ async function main() {
     return state.boards[boardId];
   };
 
+  router.route('/user').get((req: express.Request, resp: express.Response) => {
+    getAuthUser(req);
+    const { value, error } = T.object({
+      emailOrUsername: T.string().required(),
+    }).validate(req.query);
+    if (error) {
+      throw error;
+    }
+
+    const foundUsers = Object.values(state.users).filter(
+      (u) => u.username.includes(`${value.emailOrUsername}`) || u.email.includes(`${value.emailOrUsername}`),
+    ).map((u) => ({ id: u.id, username: u.username }));
+
+    resp.json(foundUsers);
+  });
+
   router.route('/board').get((req: express.Request, resp: express.Response) => {
     const user = getAuthUser(req);
     if (!user) {
