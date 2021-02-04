@@ -28,5 +28,3 @@ yarn-error.log*
 
 #debugging elements
 *.log
-
-state/state.json

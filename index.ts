@@ -1,13 +1,12 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-console */
 
-import express, { NextFunction, Send } from 'express';
+import express, { NextFunction } from 'express';
 import { readFileSync, writeFileSync } from 'fs';
 import * as atomicWrite from 'write-file-atomic';
 import * as T from '@hapi/joi';
 
 import bodyParser = require('body-parser');
-import { Response } from "express-serve-static-core";
 
 const cors = require('cors');
 
