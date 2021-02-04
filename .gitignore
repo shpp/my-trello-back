@@ -29,4 +29,4 @@ yarn-error.log*
 #debugging elements
 *.log
 
-state.json
+state/state.json
