@@ -8,8 +8,6 @@ import * as T from '@hapi/joi';
 
 import bodyParser = require('body-parser');
 
-const cors = require('cors');
-
 // eslint-disable-next-line no-unused-vars
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -130,7 +128,6 @@ async function main() {
   const router = express.Router({ mergeParams: true });
   router.use(bodyParser.urlencoded({ extended: true }));
   router.use(bodyParser.json());
-  app.use(cors());
   app.use('/:developer_id/api/v1', router);
 
   router.use(logRequest);
