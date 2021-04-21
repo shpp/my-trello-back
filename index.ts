@@ -379,6 +379,7 @@ async function main() {
     }
 
     resp.json({
+      title: board.title,
       users: board.users.map((obj) => ({ id: obj.id, username: obj.username })),
       lists: board.lists,
     });
