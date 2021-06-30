@@ -521,7 +521,7 @@ async function main() {
     }
 
     const user = getAuthUser(req);
-    const board = accessBoard(req.params.developer_id, user.id, +req.params.id);
+    const board = accessBoard(req.params.developer_id, user.id, +req.params.board_id);
 
     // eslint-disable-next-line no-restricted-syntax, camelcase
     for (const { id, position, list_id } of value) {
