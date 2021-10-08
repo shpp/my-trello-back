@@ -27,9 +27,22 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
     const authHeader = req.headers['authorization'];
     const authToken = authHeader && authHeader.split(' ')[1];
     
-    if (authToken == null) return res.status(401).send('Unauthorized');
+    if (authToken == null) {
+        return res.status(401).send({
+            error: {
+                message: 'Unauthorized',
+            },
+        });
+    }
     
     verify(authToken, ACCESS_TOKEN_SECRET, (err: Error, user: any) => {
+        if (err && err.name === 'TokenExpiredError') {
+            return res.status(401).send({
+                error: {
+                    message: 'Unauthorized',
+                },
+            });
+        }
         if (err) {
             const token = +authToken;
             const state: DeveloperEnvironmentState = appState.developers[req.params.developer_id];
