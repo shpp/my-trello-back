@@ -8,6 +8,74 @@ import * as T from '@hapi/joi';
 
 import bodyParser = require('body-parser');
 
+const { sign, verify } = require('jsonwebtoken');
+
+const ACCESS_TOKEN_SECRET = 'secret';
+const REFRESH_TOKEN_SECRET = 'refresh-secret';
+
+const createAccessToken = (payload: any) => {
+    return sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '5m'});
+};
+
+const createRefreshToken = (payload: any) => {
+    return sign(payload, REFRESH_TOKEN_SECRET, {
+        expiresIn: '1d',
+    });
+};
+
+function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const authHeader = req.headers['authorization'];
+    const authToken = authHeader && authHeader.split(' ')[1];
+    
+    if (authToken == null) {
+        return res.status(401).send({
+            error: {
+                message: 'Unauthorized',
+            },
+        });
+    }
+    
+    verify(authToken, ACCESS_TOKEN_SECRET, (err: Error, user: any) => {
+        if (err && err.name === 'TokenExpiredError') {
+            return res.status(401).send({
+                error: {
+                    message: 'Unauthorized',
+                },
+            });
+        }
+        if (err) {
+            const token = +authToken;
+            const state: DeveloperEnvironmentState = appState.developers[req.params.developer_id];
+            const res = state?.users[token];
+            if (token === 123) { // hello, hardcode ;)
+                if (!state?.users[token]) {
+                    state.users[token] = {
+                        id: token,
+                        email: 'email@example.com',
+                        password: '123',
+                        username: 'username',
+                    };
+                }
+    
+                // @ts-ignore
+                req.user = state.users[token];
+            }
+
+            if (!res) {
+                throw new CustomError('invalid token', 400);
+            }
+            // @ts-ignore
+            req.user = res;
+            return next();
+        }
+        
+        // @ts-ignore
+        req.user = user;
+        
+        next()
+    })
+}
+
 // eslint-disable-next-line no-unused-vars
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -86,6 +154,9 @@ setInterval(() => {
 async function main() {
   try {
     appState = JSON.parse(`${readFileSync(stateDir)}`);
+    if (!appState.developers) {
+        appState.developers = {}
+    }
   } catch (e) {
     appState = {
       developers: {},
@@ -138,7 +209,6 @@ async function main() {
   const getAuthUser = (req: express.Request) => {
     const token = +(req.headers.authorization?.replace('Bearer ', '') ?? 0);
     const state: DeveloperEnvironmentState = appState.developers[req.params.developer_id];
-    const res = state?.users[token];
     if (token === 123) { // hello, hardcode ;)
       if (!state?.users[token]) {
         state.users[token] = {
@@ -148,13 +218,10 @@ async function main() {
           username: 'username',
         };
       }
-
       return state.users[token];
     }
-    if (!res) {
-      throw new CustomError('invalid token', 400);
-    }
-    return res;
+    // @ts-ignore
+    return req.user;
   };
 
   const accessBoard = (developerId: string, userId: number, boardId: number) => {
@@ -256,12 +323,18 @@ async function main() {
     ).length > 0) {
       throw new CustomError('username already exists', 400);
     }
-
+    const accessToken = createAccessToken(newUser);
+    const refreshToken = createRefreshToken(newUser);
     state.users[newUser.id] = newUser;
-    resp.json({ result: 'Created', id: newUser.id });
+    resp.json({
+        result: 'Created',
+        id: newUser.id,
+        accessToken,
+        refreshToken
+    });
   });
 
-  router.route('/user').get((req: express.Request, resp: express.Response) => {
+  router.route('/user').get(authMiddleware, (req: express.Request, resp: express.Response) => {
     getAuthUser(req);
     const { value, error } = T.object({
       emailOrUsername: T.string().required(),
@@ -297,11 +370,44 @@ async function main() {
     if (user.password !== value.password) {
       throw new CustomError('password wrong', 400);
     }
-
-    resp.json({ result: 'Authorized', token: `${user.id}` });
+    const accessToken = createAccessToken(user);
+    const refreshToken = createRefreshToken(user);
+    resp.json({
+        result: 'Authorized',
+        id: user.id,
+        accessToken,
+        refreshToken
+    });
   });
 
-  router.route('/board').get((req: express.Request, resp: express.Response) => {
+  router.route('/refresh').post((req: express.Request, resp: express.Response) => {
+      const { value, error } = T.object({
+          refreshToken: T.string()
+      }).validate(req.body);
+      if (error) {
+          throw new CustomError('wrong data', 400, error);
+      }
+      const decodedUser = verify(value.refreshToken, REFRESH_TOKEN_SECRET);
+      const state: DeveloperEnvironmentState = appState.developers[req.params.developer_id];
+      const userArray = Object.values(state.users).filter(
+          (u) => u.email === decodedUser.email,
+      );
+      if (userArray.length === 0) {
+          throw new CustomError('user not found', 404);
+      }
+      
+      const user = userArray[0];
+      const accessToken = createAccessToken(user);
+      const refreshToken = createRefreshToken(user);
+      resp.json({
+          result: 'Authorized',
+          id: user.id,
+          accessToken,
+          refreshToken
+      });
+  });
+
+  router.route('/board').get(authMiddleware, (req: express.Request, resp: express.Response) => {
     const user = getAuthUser(req);
     if (!user) {
       throw new CustomError('invalid token', 400);
@@ -315,7 +421,7 @@ async function main() {
     });
   });
 
-  router.route('/board').post((req: express.Request, resp: express.Response) => {
+  router.route('/board').post(authMiddleware, (req: express.Request, resp: express.Response) => {
     const { value, error } = T.object({
       title: T.string().required(),
     }).validate(req.body);
@@ -347,7 +453,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id').put((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id').put(authMiddleware, (req: express.Request, resp: express.Response) => {
     if (req.body.title) {
       changeTitleBoard(req, resp);
     }
@@ -356,7 +462,7 @@ async function main() {
     }
   });
 
-  router.route('/board/:board_id').delete((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id').delete(authMiddleware, (req: express.Request, resp: express.Response) => {
     const user = getAuthUser(req);
     const board = accessBoard(req.params.developer_id, user.id, +req.params.board_id);
     const state: DeveloperEnvironmentState = appState.developers[req.params.developer_id];
@@ -367,7 +473,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id').get((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id').get(authMiddleware, (req: express.Request, resp: express.Response) => {
     const user = getAuthUser(req);
     if (!user) {
       throw new CustomError('invalid token', 400);
@@ -385,7 +491,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/list').post((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/list').post(authMiddleware, (req: express.Request, resp: express.Response) => {
     const { value, error } = T.object({
       title: T.string().required(),
       position: T.number().integer().required(),
@@ -411,7 +517,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/list').put((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/list').put(authMiddleware, (req: express.Request, resp: express.Response) => {
     const { value, error } = T.array().items(T.object({
       id: T.number().required(),
       position: T.number().integer().required(),
@@ -433,7 +539,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/list/:list_id').put((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/list/:list_id').put(authMiddleware, (req: express.Request, resp: express.Response) => {
     const { value, error } = T.object({
       position: T.number().integer(),
       title: T.string(),
@@ -461,7 +567,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/list/:list_id').delete((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/list/:list_id').delete(authMiddleware, (req: express.Request, resp: express.Response) => {
     const user = getAuthUser(req);
     const board = accessBoard(req.params.developer_id, user.id, +req.params.board_id);
     const list = board.lists[+req.params.list_id];
@@ -476,7 +582,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/card').post((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/card').post(authMiddleware, (req: express.Request, resp: express.Response) => {
     const { value, error } = T.object({
       position: T.number().integer(),
       title: T.string(),
@@ -510,7 +616,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/card').put((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/card').put(authMiddleware, (req: express.Request, resp: express.Response) => {
     const { value, error } = T.array().items(T.object({
       id: T.number().required(),
       position: T.number().integer().required(),
@@ -537,7 +643,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/card/:card_id').put((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/card/:card_id').put(authMiddleware, (req: express.Request, resp: express.Response) => {
     if (req.body.title) {
       changeCard(req, resp, 'title');
     }
@@ -546,7 +652,7 @@ async function main() {
     }
   });
 
-  router.route('/board/:board_id/card/:card_id').delete((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/card/:card_id').delete(authMiddleware, (req: express.Request, resp: express.Response) => {
     const user = getAuthUser(req);
     const board = accessBoard(req.params.developer_id, user.id, +req.params.board_id);
     const list = findCardsList(board, +req.params.card_id);
@@ -562,7 +668,7 @@ async function main() {
     });
   });
 
-  router.route('/board/:board_id/card/:card_id/users').put((req: express.Request, resp: express.Response) => {
+  router.route('/board/:board_id/card/:card_id/users').put(authMiddleware, (req: express.Request, resp: express.Response) => {
     const { value, error } = T.object({
       add: T.array().items(T.number()),
       remove: T.array().items(T.number()),
@@ -593,11 +699,10 @@ async function main() {
     });
   });
 
-
   app.use((err: CustomError, req: express.Request, res: express.Response, next: NextFunction) => {
     if (err) {
       console.log(`[ERROR]\t${err.statusCode}\t${err.message}\t${err.data ? JSON.stringify(err.data) : ''}`);
-      res.status(err.statusCode).send({
+      res.status(err.statusCode || 500).send({
         error: {
           message: err.message,
           data: err.data,
