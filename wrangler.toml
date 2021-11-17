@@ -1,0 +1,19 @@
+name = "my-trello-back"
+type = "javascript"
+compatibility_date = "2021-11-17"
+route=""
+required_secrets=[]
+# NOTE: top-level vars are not inherited/extended
+
+[env.kowospace]
+# get zone_id here: https://dash.cloudflare.com/overview
+zone_id = "8d8480758f960a314adcd3ec9b2f8967"
+usage_model = "bundled"
+
+kv_namespaces = [
+         { binding = "KV", id = "60254b117a9d40d2be797d802eb4182a" }
+]
+
+# NOTE: for dns feature of shpp scripts, use "route", not "routes"
+route = "my-trello-back.kowo.space/*"
+vars = { }
