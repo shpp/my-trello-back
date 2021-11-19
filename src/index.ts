@@ -21,7 +21,7 @@ import {
   login,
   notFound,
   refresh,
-} from './utils/actions';
+} from './app/actions';
 
 setupRouting(async (router: Router) => {
   const prefix = '/:developer_id/api/v1';

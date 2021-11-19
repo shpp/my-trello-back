@@ -1,4 +1,5 @@
-import { CfRequest, User } from './types';
+import { CfRequest } from '../utils/types';
+import { User } from './types';
 import { CustomError } from './custom-error';
 import jwt from '@tsndr/cloudflare-worker-jwt';
 

@@ -1,4 +1,5 @@
-import { AppState, Board, CfRequest, List, User } from './types';
+import { CfRequest } from '../utils/types';
+import { AppState, Board, List, User } from './types';
 import * as T from 'joi';
 import { getState, saveState } from './state';
 import { createAccessToken, createRefreshToken, getAuthUser, getUserFromRefreshToken } from './auth';
