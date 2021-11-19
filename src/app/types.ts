@@ -49,3 +49,7 @@ export interface Card {
   created_at: number;
   position: number;
 }
+
+export interface RequestParams {
+  [param: string]: string;
+}

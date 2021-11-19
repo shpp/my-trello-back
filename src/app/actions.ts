@@ -1,5 +1,5 @@
 import { CfRequest } from '../utils/types';
-import { AppState, Board, List, User } from './types';
+import { Board, DeveloperEnvironmentState, List, RequestParams, User } from './types';
 import * as T from 'joi';
 import { getState, saveState } from './state';
 import { createAccessToken, createRefreshToken, getAuthUser, getUserFromRefreshToken } from './auth';
@@ -11,6 +11,7 @@ export async function notFound(): Promise<Response> {
 }
 
 export async function createUser(req: CfRequest): Promise<Response> {
+  const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate(
     {
       email: T.string().email({ tlds: { allow: false } }),
@@ -18,9 +19,7 @@ export async function createUser(req: CfRequest): Promise<Response> {
     },
     await req.json()
   );
-
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const state: AppState = await getState(developerId);
+  const state = await getState(params.developerId);
 
   const newUser = {
     id: Date.now(),
@@ -30,15 +29,13 @@ export async function createUser(req: CfRequest): Promise<Response> {
   };
 
   if (
-    Object.values(state.developers[developerId].users).filter(
-      (u) => u.username === newUser.username || u.email === newUser.email
-    ).length > 0
+    Object.values(state.users).filter((u) => u.username === newUser.username || u.email === newUser.email).length > 0
   ) {
     throw new CustomError('Username already exists', 400);
   }
 
-  state.developers[developerId].users[newUser.id] = newUser;
-  await saveState(state);
+  state.users[newUser.id] = newUser;
+  await saveState(params.developerId, state);
 
   const accessToken = await createAccessToken(newUser);
   const refreshToken = await createRefreshToken(newUser);
@@ -55,11 +52,11 @@ export async function createUser(req: CfRequest): Promise<Response> {
 
 export async function getUsers(req: CfRequest): Promise<Response> {
   await getAuthUser(req);
-  const developerId = getParamFromRequest(req, 'developer_id');
+  const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate({ emailOrUsername: T.string().required() }, req.query);
-  const state: AppState = await getState(developerId);
+  const state = await getState(params.developerId);
 
-  const foundUsers = Object.values(state.developers[developerId].users)
+  const foundUsers = Object.values(state.users)
     .filter((u) => u.username.includes(`${value.emailOrUsername}`) || u.email.includes(`${value.emailOrUsername}`))
     .map((u) => ({ id: u.id, username: u.username }));
 
@@ -67,6 +64,7 @@ export async function getUsers(req: CfRequest): Promise<Response> {
 }
 
 export async function login(req: CfRequest): Promise<Response> {
+  const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate(
     {
       email: T.string().email({ tlds: { allow: false } }),
@@ -75,9 +73,8 @@ export async function login(req: CfRequest): Promise<Response> {
     await req.json()
   );
 
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const state: AppState = await getState(developerId);
-  const userArray = Object.values(state.developers[developerId].users).filter((u) => u.email === value.email);
+  const state = await getState(params.developerId);
+  const userArray = Object.values(state.users).filter((u) => u.email === value.email);
   if (userArray.length === 0) {
     throw new CustomError('User not found', 404);
   }
@@ -100,13 +97,11 @@ export async function login(req: CfRequest): Promise<Response> {
 }
 
 export async function refresh(req: CfRequest): Promise<Response> {
+  const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate({ refreshToken: T.string() }, await req.json());
   const decodedUser = await getUserFromRefreshToken(value.refreshToken);
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const state: AppState = await getState(developerId);
-  const userArray = Object.values(state.developers[developerId].users).filter(
-    (u: User) => u.email === decodedUser.email
-  );
+  const state = await getState(params.developerId);
+  const userArray = Object.values(state.users).filter((u: User) => u.email === decodedUser.email);
 
   if (userArray.length === 0) {
     throw new CustomError('User not found', 404);
@@ -128,11 +123,9 @@ export async function refresh(req: CfRequest): Promise<Response> {
 
 export async function getBoards(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const state: AppState = await getState(developerId);
-  const res = Object.values(state.developers[developerId].boards).filter(
-    (b) => b.users.filter((obj) => user.id === obj.id).length
-  );
+  const params = getParamsFromRequest(req, ['developer_id']);
+  const state = await getState(params.developerId);
+  const res = Object.values(state.boards).filter((b) => b.users.filter((obj) => user.id === obj.id).length);
 
   return new Response(
     JSON.stringify({
@@ -143,11 +136,11 @@ export async function getBoards(req: CfRequest): Promise<Response> {
 
 export async function createBoard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate({ title: T.string().required() }, await req.json());
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const state: AppState = await getState(developerId);
+  const state = await getState(params.developerId);
 
-  if (Object.values(state.developers[developerId].boards).filter((b) => b.title === value.title).length > 0) {
+  if (Object.values(state.boards).filter((b) => b.title === value.title).length > 0) {
     throw new CustomError('Board already exists', 400);
   }
 
@@ -158,8 +151,8 @@ export async function createBoard(req: CfRequest): Promise<Response> {
     lists: {},
   };
 
-  state.developers[developerId].boards[board.id] = board;
-  await saveState(state);
+  state.boards[board.id] = board;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -171,19 +164,17 @@ export async function createBoard(req: CfRequest): Promise<Response> {
 
 export async function changeBoard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
   const body = await req.json();
   const boardData = body.data || null;
-  let title = null;
 
+  let title = null;
   if (body.title) {
     const value = validate({ title: T.string().required() }, body);
     title = value.title;
   }
-
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const state = await getState(developerId);
-  let board = getBoardState(state, developerId, user.id, +boardId);
+  const state = await getState(params.developerId);
+  let board = getBoardState(state, user.id, +params.boardId);
 
   if (boardData) {
     board = boardData;
@@ -193,8 +184,8 @@ export async function changeBoard(req: CfRequest): Promise<Response> {
     board.title = title;
   }
 
-  state.developers[developerId].boards[board.id] = board;
-  await saveState(state);
+  state.boards[board.id] = board;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -205,13 +196,12 @@ export async function changeBoard(req: CfRequest): Promise<Response> {
 
 export async function deleteBoard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
 
-  delete state.developers[developerId].boards[board.id];
-  await saveState(state);
+  delete state.boards[board.id];
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -222,10 +212,9 @@ export async function deleteBoard(req: CfRequest): Promise<Response> {
 
 export async function getBoard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
 
   return new Response(
     JSON.stringify({
@@ -238,6 +227,7 @@ export async function getBoard(req: CfRequest): Promise<Response> {
 
 export async function createList(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
   const value = validate(
     {
       title: T.string().required(),
@@ -246,10 +236,8 @@ export async function createList(req: CfRequest): Promise<Response> {
     await req.json()
   );
 
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
 
   const newList = {
     id: Date.now(),
@@ -258,8 +246,8 @@ export async function createList(req: CfRequest): Promise<Response> {
     position: value.position,
   };
 
-  state.developers[developerId].boards[board.id].lists[newList.id] = newList;
-  await saveState(state);
+  state.boards[board.id].lists[newList.id] = newList;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -270,6 +258,7 @@ export async function createList(req: CfRequest): Promise<Response> {
 
 export async function changeListPosition(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
   const { value, error } = T.array()
     .items(
       T.object({
@@ -282,19 +271,16 @@ export async function changeListPosition(req: CfRequest): Promise<Response> {
   if (error) {
     throw new CustomError('Wrong data', 400);
   }
-
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
 
   // eslint-disable-next-line no-restricted-syntax
   for (const { id, position } of value) {
     board.lists[id].position = position;
   }
 
-  state.developers[developerId].boards[board.id] = board;
-  await saveState(state);
+  state.boards[board.id] = board;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -305,6 +291,7 @@ export async function changeListPosition(req: CfRequest): Promise<Response> {
 
 export async function changeList(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id']);
   const value = validate(
     {
       position: T.number().integer(),
@@ -312,13 +299,9 @@ export async function changeList(req: CfRequest): Promise<Response> {
     },
     await req.json()
   );
-
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const listId = getParamFromRequest(req, 'list_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
-  const list = board.lists[+listId];
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
+  const list = board.lists[+params.listId];
 
   if (!list) {
     throw new CustomError('List not found', 404);
@@ -331,8 +314,8 @@ export async function changeList(req: CfRequest): Promise<Response> {
     list.position = value.position;
   }
 
-  state.developers[developerId].boards[board.id].lists[list.id] = list;
-  await saveState(state);
+  state.boards[board.id].lists[list.id] = list;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -343,19 +326,17 @@ export async function changeList(req: CfRequest): Promise<Response> {
 
 export async function deleteList(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const listId = getParamFromRequest(req, 'list_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
-  const list = board.lists[+listId];
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id']);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
+  const list = board.lists[+params.listId];
 
   if (!list) {
     throw new CustomError('List not found', 404);
   }
 
-  delete state.developers[developerId].boards[board.id].lists[list.id];
-  await saveState(state);
+  delete state.boards[board.id].lists[list.id];
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -366,6 +347,7 @@ export async function deleteList(req: CfRequest): Promise<Response> {
 
 export async function createCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id']);
   const value = validate(
     {
       position: T.number().integer(),
@@ -375,12 +357,9 @@ export async function createCard(req: CfRequest): Promise<Response> {
     await req.json()
   );
 
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const listId = getParamFromRequest(req, 'list_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
-  const list = board.lists[+listId];
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
+  const list = board.lists[+params.listId];
 
   if (!list) {
     throw new CustomError('List not found', 404);
@@ -395,8 +374,8 @@ export async function createCard(req: CfRequest): Promise<Response> {
     position: value.position,
   };
 
-  state.developers[developerId].boards[board.id].lists[list.id].cards[newCard.id] = newCard;
-  await saveState(state);
+  state.boards[board.id].lists[list.id].cards[newCard.id] = newCard;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -408,6 +387,7 @@ export async function createCard(req: CfRequest): Promise<Response> {
 
 export async function changeCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id', 'card_id']);
   const value = validate(
     {
       list_id: T.number().integer(),
@@ -417,19 +397,15 @@ export async function changeCard(req: CfRequest): Promise<Response> {
     await req.json()
   );
 
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const listId = getParamFromRequest(req, 'list_id');
-  const cardId = getParamFromRequest(req, 'card_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
-  const list = board.lists[+listId];
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
+  const list = board.lists[+params.listId];
 
   if (!list) {
     throw new CustomError('List not found', 404);
   }
 
-  const card = list.cards[+cardId];
+  const card = list.cards[+params.cardId];
 
   if (!card) {
     throw new CustomError('Card not found', 404);
@@ -442,12 +418,12 @@ export async function changeCard(req: CfRequest): Promise<Response> {
     card.description = value.description;
   }
   if (value.list_id) {
-    delete state.developers[developerId].boards[board.id].lists[list.id].cards[card.id];
+    delete state.boards[board.id].lists[list.id].cards[card.id];
     list.id = value.list_id;
   }
 
-  state.developers[developerId].boards[board.id].lists[list.id].cards[card.id] = card;
-  await saveState(state);
+  state.boards[board.id].lists[list.id].cards[card.id] = card;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -458,6 +434,7 @@ export async function changeCard(req: CfRequest): Promise<Response> {
 
 export async function changeCardPosition(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
   const { value, error } = T.array()
     .items(
       T.object({
@@ -472,10 +449,8 @@ export async function changeCardPosition(req: CfRequest): Promise<Response> {
     throw new CustomError('Wrong data', 404);
   }
 
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
 
   // eslint-disable-next-line no-restricted-syntax, camelcase
   for (const { id, position, list_id } of value) {
@@ -486,8 +461,8 @@ export async function changeCardPosition(req: CfRequest): Promise<Response> {
     board.lists[list_id].cards[id] = card;
   }
 
-  state.developers[developerId].boards[board.id] = board;
-  await saveState(state);
+  state.boards[board.id] = board;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -498,19 +473,16 @@ export async function changeCardPosition(req: CfRequest): Promise<Response> {
 
 export async function deleteCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const listId = getParamFromRequest(req, 'list_id');
-  const cardId = getParamFromRequest(req, 'card_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
-  const list = board.lists[+listId];
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id', 'card_id']);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
+  const list = board.lists[+params.listId];
 
   if (!list) {
     throw new CustomError('List not found', 404);
   }
 
-  const card = list.cards[+cardId];
+  const card = list.cards[+params.cardId];
 
   if (!card) {
     throw new CustomError('Card not found', 404);
@@ -518,8 +490,8 @@ export async function deleteCard(req: CfRequest): Promise<Response> {
 
   delete list.cards[card.id];
 
-  state.developers[developerId].boards[board.id].lists[list.id] = list;
-  await saveState(state);
+  state.boards[board.id].lists[list.id] = list;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -530,6 +502,7 @@ export async function deleteCard(req: CfRequest): Promise<Response> {
 
 export async function changeUsersForCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id', 'card_id']);
   const value = validate(
     {
       add: T.array().items(T.number()),
@@ -538,19 +511,15 @@ export async function changeUsersForCard(req: CfRequest): Promise<Response> {
     await req.json()
   );
 
-  const developerId = getParamFromRequest(req, 'developer_id');
-  const boardId = getParamFromRequest(req, 'board_id');
-  const listId = getParamFromRequest(req, 'list_id');
-  const cardId = getParamFromRequest(req, 'card_id');
-  const state = await getState(developerId);
-  const board = getBoardState(state, developerId, user.id, +boardId);
-  const list = board.lists[+listId];
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
+  const list = board.lists[+params.listId];
 
   if (!list) {
     throw new CustomError('List not found', 404);
   }
 
-  const card = list.cards[+cardId];
+  const card = list.cards[+params.cardId];
 
   if (!card) {
     throw new CustomError('Card not found', 404);
@@ -565,8 +534,8 @@ export async function changeUsersForCard(req: CfRequest): Promise<Response> {
     card.users = card.users.filter((id: number) => id !== removeUserId);
   }
 
-  state.developers[developerId].boards[board.id].lists[list.id].cards[card.id] = card;
-  await saveState(state);
+  state.boards[board.id].lists[list.id].cards[card.id] = card;
+  await saveState(params.developerId, state);
 
   return new Response(
     JSON.stringify({
@@ -593,8 +562,8 @@ function findCardsList(board: Board, cardId: number): List {
   return cardLists[0];
 }
 
-function getBoardState(appState: AppState, developerId: string | number, userId: number, boardId: number): Board {
-  const board = appState.developers[developerId].boards[boardId];
+function getBoardState(state: DeveloperEnvironmentState, userId: number, boardId: number): Board {
+  const board = state.boards[boardId];
 
   if (!board.users.filter((u) => u.id === userId)) {
     throw new CustomError('Forbidden', 403);
@@ -603,12 +572,24 @@ function getBoardState(appState: AppState, developerId: string | number, userId:
   return board;
 }
 
-function getParamFromRequest(req: CfRequest, paramName: string): string {
-  const param = req.params ? req.params[paramName] : null;
+function getParamsFromRequest(req: CfRequest, paramsName: string[]): RequestParams {
+  const params: RequestParams = {};
+  const nameConvertor: { [name: string]: string } = {
+    developer_id: 'developerId',
+    board_id: 'boardId',
+    list_id: 'listId',
+    card_id: 'cardId',
+  };
 
-  if (!param) {
-    throw new CustomError(`Parameter ${paramName} is missing`, 400);
-  }
+  paramsName.forEach((name) => {
+    const param = req.params ? req.params[name] : null;
 
-  return param;
+    if (!param) {
+      throw new CustomError(`Parameter ${name} is missing`, 400);
+    }
+
+    params[nameConvertor[name]] = param;
+  });
+
+  return params;
 }
