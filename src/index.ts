@@ -39,14 +39,14 @@ setupRouting(async (router: Router) => {
 
   router.post(`${prefix}/board/:board_id/list`, createList);
   router.put(`${prefix}/board/:board_id/list`, changeListPosition);
-  router.put(`${prefix}/board/:board_id/list/list_id`, changeList);
-  router.delete(`${prefix}/board/:board_id/list/list_id`, deleteList);
+  router.put(`${prefix}/board/:board_id/list/:list_id`, changeList);
+  router.delete(`${prefix}/board/:board_id/list/:list_id`, deleteList);
 
   router.post(`${prefix}/board/:board_id/card`, createCard);
   router.put(`${prefix}/board/:board_id/card`, changeCardPosition);
-  router.put(`${prefix}/board/:board_id/card/card_id`, changeCard);
-  router.delete(`${prefix}/board/:board_id/card/card_id`, deleteCard);
-  router.put(`${prefix}/board/:board_id/card/card_id/users`, changeUsersForCard);
+  router.put(`${prefix}/board/:board_id/card/:card_id`, changeCard);
+  router.delete(`${prefix}/board/:board_id/card/:card_id`, deleteCard);
+  router.put(`${prefix}/board/:board_id/card/:card_id/users`, changeUsersForCard);
 
   router.all('*', notFound);
 });

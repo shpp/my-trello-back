@@ -347,7 +347,7 @@ export async function deleteList(req: CfRequest): Promise<Response> {
 
 export async function createCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id']);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
   const value = validate(
     {
       position: T.number().integer(),
@@ -359,7 +359,7 @@ export async function createCard(req: CfRequest): Promise<Response> {
 
   const state = await getState(params.developerId);
   const board = getBoardState(state, user.id, +params.boardId);
-  const list = board.lists[+params.listId];
+  const list = board.lists[+value.list_id];
 
   if (!list) {
     throw new CustomError('List not found', 404);
@@ -387,7 +387,7 @@ export async function createCard(req: CfRequest): Promise<Response> {
 
 export async function changeCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id', 'card_id']);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'card_id']);
   const value = validate(
     {
       list_id: T.number().integer(),
@@ -399,7 +399,7 @@ export async function changeCard(req: CfRequest): Promise<Response> {
 
   const state = await getState(params.developerId);
   const board = getBoardState(state, user.id, +params.boardId);
-  const list = board.lists[+params.listId];
+  const list = board.lists[+value.list_id];
 
   if (!list) {
     throw new CustomError('List not found', 404);
@@ -473,21 +473,11 @@ export async function changeCardPosition(req: CfRequest): Promise<Response> {
 
 export async function deleteCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id', 'card_id']);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'card_id']);
   const state = await getState(params.developerId);
   const board = getBoardState(state, user.id, +params.boardId);
-  const list = board.lists[+params.listId];
-
-  if (!list) {
-    throw new CustomError('List not found', 404);
-  }
-
+  const list = findCardsList(board, +params.cardId);
   const card = list.cards[+params.cardId];
-
-  if (!card) {
-    throw new CustomError('Card not found', 404);
-  }
-
   delete list.cards[card.id];
 
   state.boards[board.id].lists[list.id] = list;
@@ -502,7 +492,7 @@ export async function deleteCard(req: CfRequest): Promise<Response> {
 
 export async function changeUsersForCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
-  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'list_id', 'card_id']);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'card_id']);
   const value = validate(
     {
       add: T.array().items(T.number()),
@@ -513,17 +503,8 @@ export async function changeUsersForCard(req: CfRequest): Promise<Response> {
 
   const state = await getState(params.developerId);
   const board = getBoardState(state, user.id, +params.boardId);
-  const list = board.lists[+params.listId];
-
-  if (!list) {
-    throw new CustomError('List not found', 404);
-  }
-
+  const list = findCardsList(board, +params.cardId);
   const card = list.cards[+params.cardId];
-
-  if (!card) {
-    throw new CustomError('Card not found', 404);
-  }
 
   // eslint-disable-next-line no-restricted-syntax
   for (const addUserId of value.add || []) {

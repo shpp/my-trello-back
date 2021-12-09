@@ -3,9 +3,9 @@ import { rethrowErrors } from './fix-stacktraces-hack';
 import { captureError } from '@cfworker/sentry';
 import { CfRequest } from './types';
 
-// declare global {
-//   const SENTRY_DSN: string;
-// }
+declare global {
+  const SENTRY_DSN: string;
+}
 
 declare global {
   let buildMetadata: { time: number };
@@ -42,21 +42,20 @@ export function setupRouting(setupRouterFunc: (router: Router) => void): void {
 
     const ctx: ReqCtx = {
       captureError: (e: Error, data?: { [s: string]: string | number | boolean }) => {
-        return;
-        // if (!SENTRY_DSN || e.message.startsWith('RequestBodyReadError')) return;
-        // const sentryRes = captureError(SENTRY_DSN, 'worker', '' + buildMetadata.time, e, enrichedRequest, {
-        //   ...(data || {}),
-        //   logs,
-        //   incoming,
-        // });
+        if (!SENTRY_DSN || e.message.startsWith('RequestBodyReadError')) return;
+        const sentryRes = captureError(SENTRY_DSN, 'worker', '' + buildMetadata.time, e, enrichedRequest, {
+          ...(data || {}),
+          logs,
+          incoming,
+        });
         // console.log('stack: ' + e.stack);
-        // sentryId = sentryRes.event_id;
-        // event.waitUntil(sentryRes.posted);
+        sentryId = sentryRes.event_id;
+        event.waitUntil(sentryRes.posted);
       },
       log: (message: string, data?: { [s: string]: string | number | boolean }) => {
         const m = { time: new Date().toISOString(), message, ...(data || {}) };
         logs.push(m);
-        console.log('log: ' + JSON.stringify(m));
+        // console.log('log: ' + JSON.stringify(m));
       },
       event: event,
       request: enrichedRequest,
@@ -86,9 +85,11 @@ export function setupRouting(setupRouterFunc: (router: Router) => void): void {
           });
           return respWithHeaders;
         } catch (e) {
-          ctx.captureError(e, { crash: true });
+          if (!e.statusCode) {
+            ctx.captureError(e, { crash: true });
+          }
 
-          return new Response(JSON.stringify({ error: { message: e.message } }), {
+          return new Response(JSON.stringify({ error: { status: e.statusCode || 500, message: e.message } }), {
             status: e.statusCode || 500,
             headers: getHeaders(),
           });

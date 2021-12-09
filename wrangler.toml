@@ -2,7 +2,7 @@ name = "my-trello-back"
 type = "javascript"
 compatibility_date = "2021-11-17"
 route=""
-required_secrets=["ACCESS_TOKEN_SECRET", "REFRESH_TOKEN_SECRET", "REDIS_TOKEN"]
+required_secrets=["ACCESS_TOKEN_SECRET", "REFRESH_TOKEN_SECRET", "REDIS_TOKEN", "SENTRY_DNS"]
 # NOTE: top-level vars are not inherited/extended
 
 [env.kowospace]
@@ -11,7 +11,7 @@ zone_id = "8d8480758f960a314adcd3ec9b2f8967"
 usage_model = "bundled"
 
 kv_namespaces = [
-         { binding = "KV", id = "60254b..............." }
+         { binding = "KV", id = "60254b117a..................." }
 ]
 
 # NOTE: for dns feature of shpp scripts, use "route", not "routes"
