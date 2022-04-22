@@ -11,7 +11,7 @@ zone_id = "8d8480758f960a314adcd3ec9b2f8967"
 usage_model = "bundled"
 
 kv_namespaces = [
-         { binding = "KV", id = "60254b117a..................." }
+         { binding = "KV", id = "60254b117a9d40d2be797d802eb4182a" }
 ]
 
 # NOTE: for dns feature of shpp scripts, use "route", not "routes"

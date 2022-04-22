@@ -71,6 +71,9 @@ export function setupRouting(setupRouterFunc: (router: Router) => void): void {
           version: new Date(buildMetadata.time).toISOString(),
           ...(sentryId ? { debugId: sentryId } : {}),
           ...ctx.additionalResponseHeaders,
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET,HEAD,PUT,POST,DELETE,OPTIONS',
+          'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         });
         try {
           const resp: Response = await router.handle(enrichedRequest, ctx);

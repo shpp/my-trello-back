@@ -48,5 +48,9 @@ setupRouting(async (router: Router) => {
   router.delete(`${prefix}/board/:board_id/card/:card_id`, deleteCard);
   router.put(`${prefix}/board/:board_id/card/:card_id/users`, changeUsersForCard);
 
+  router.options('*', () => {
+    return new Response(null);
+  });
+
   router.all('*', notFound);
 });
