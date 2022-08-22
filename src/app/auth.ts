@@ -26,7 +26,13 @@ export async function getAuthUser(req: CfRequest): Promise<User> {
     throw new CustomError('Unauthorized', 401);
   }
 
-  const tokenIsValid = await jwt.verify(authToken, ACCESS_TOKEN_SECRET);
+  let tokenIsValid = false;
+
+  try {
+    tokenIsValid = await jwt.verify(authToken, ACCESS_TOKEN_SECRET);
+  } catch (e) {
+    //
+  }
 
   if (!tokenIsValid) {
     throw new CustomError('Unauthorized', 401);
@@ -36,7 +42,13 @@ export async function getAuthUser(req: CfRequest): Promise<User> {
 }
 
 export async function getUserFromRefreshToken(refreshToken: string): Promise<User> {
-  const tokenIsValid = await jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+  let tokenIsValid = false;
+
+  try {
+    tokenIsValid = await jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+  } catch (e) {
+    //
+  }
 
   if (!tokenIsValid) {
     throw new CustomError('Invalid token', 401);
