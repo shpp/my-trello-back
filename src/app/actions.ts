@@ -1,5 +1,5 @@
 import { CfRequest } from '../utils/types';
-import { Board, DeveloperEnvironmentState, List, RequestParams, User } from './types';
+import { Board, DeveloperEnvironmentState, List, RequestParams } from './types';
 import * as T from 'joi';
 import { getState, saveState } from './state';
 import { createAccessToken, createRefreshToken, getAuthUser, getUserFromRefreshToken } from './auth';
@@ -14,8 +14,10 @@ export async function createUser(req: CfRequest): Promise<Response> {
   const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate(
     {
-      email: T.string().email({ tlds: { allow: false } }),
-      password: T.string(),
+      email: T.string()
+        .email({ tlds: { allow: false } })
+        .required(),
+      password: T.string().required(),
     },
     await req.json()
   );
@@ -54,6 +56,7 @@ export async function createUser(req: CfRequest): Promise<Response> {
 }
 
 export async function getUsers(req: CfRequest): Promise<Response> {
+  const user = await getAuthUser(req);
   const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate({ emailOrUsername: T.string().required() }, req.query);
   const state = await getState(params.developerId);
@@ -125,7 +128,7 @@ export async function getBoards(req: CfRequest): Promise<Response> {
 
   return new Response(
     JSON.stringify({
-      boards: res.map((b) => ({ id: b.id, title: b.title })),
+      boards: res.map((b) => ({ id: b.id, title: b.title, custom: b.custom })),
     })
   );
 }
@@ -133,7 +136,7 @@ export async function getBoards(req: CfRequest): Promise<Response> {
 export async function createBoard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
   const params = getParamsFromRequest(req, ['developer_id']);
-  const value = validate({ title: T.string().required() }, await req.json());
+  const value = validate({ title: T.string().required(), custom: T.any() }, await req.json());
   const state = await getState(params.developerId);
 
   if (Object.values(state.boards).filter((b) => b.title === value.title).length > 0) {
@@ -145,6 +148,7 @@ export async function createBoard(req: CfRequest): Promise<Response> {
     title: value.title,
     users: [{ id: user.id, username: user.username }],
     lists: {},
+    custom: value.custom,
   };
 
   state.boards[board.id] = board;
@@ -164,24 +168,12 @@ export async function createBoard(req: CfRequest): Promise<Response> {
 export async function changeBoard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
   const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
-  const body = await req.json();
-  const boardData = body.data || null;
-
-  let title = null;
-  if (body.title) {
-    const value = validate({ title: T.string().required() }, body);
-    title = value.title;
-  }
+  const data = await req.json();
+  const value = validate({ title: T.string(), custom: T.any() }, data);
   const state = await getState(params.developerId);
-  let board = getBoardState(state, user.id, +params.boardId);
-
-  if (boardData) {
-    board = boardData;
-  }
-
-  if (title) {
-    board.title = title;
-  }
+  const board = getBoardState(state, user.id, +params.boardId);
+  board.title = value.title || board.title;
+  board.custom = value.custom || board.custom;
 
   state.boards[board.id] = board;
   await saveState(params.developerId, state);
@@ -218,6 +210,7 @@ export async function getBoard(req: CfRequest): Promise<Response> {
   return new Response(
     JSON.stringify({
       title: board.title,
+      custom: board.custom,
       users: board.users.map((u) => ({ id: u.id, username: u.username })),
       lists: Object.values(board.lists)
         .map((l) => ({
@@ -231,6 +224,7 @@ export async function getBoard(req: CfRequest): Promise<Response> {
               description: c.description,
               position: c.position,
               users: c.users,
+              custom: c.custom,
             }))
             .sort((a, b) => {
               return a.position - b.position;
@@ -389,13 +383,16 @@ export async function deleteList(req: CfRequest): Promise<Response> {
 export async function createCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
   const params = getParamsFromRequest(req, ['developer_id', 'board_id']);
+  const data = await req.json();
   const value = validate(
     {
-      position: T.number().integer(),
-      title: T.string(),
+      position: T.number().integer().required(),
+      title: T.string().required(),
       list_id: T.number().required(),
+      description: T.string(),
+      custom: T.any(),
     },
-    await req.json()
+    data
   );
 
   const state = await getState(params.developerId);
@@ -409,10 +406,11 @@ export async function createCard(req: CfRequest): Promise<Response> {
   const newCard = {
     id: Date.now(),
     title: value.title,
-    description: '',
+    description: value.description,
     users: [],
     created_at: Date.now(),
     position: value.position,
+    custom: value.custom,
   };
 
   state.boards[board.id].lists[list.id].cards[newCard.id] = newCard;
@@ -432,13 +430,15 @@ export async function createCard(req: CfRequest): Promise<Response> {
 export async function changeCard(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
   const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'card_id']);
+  const data = await req.json();
   const value = validate(
     {
-      list_id: T.number().integer(),
-      title: T.string() || undefined,
-      description: T.string() || undefined,
+      list_id: T.number().integer().required(),
+      title: T.string(),
+      description: T.string(),
+      custom: T.any(),
     },
-    await req.json()
+    data
   );
 
   const state = await getState(params.developerId);
@@ -455,12 +455,10 @@ export async function changeCard(req: CfRequest): Promise<Response> {
     throw new CustomError('Card not found', 404);
   }
 
-  if (value.title) {
-    card.title = value.title;
-  }
-  if (value.description) {
-    card.description = value.description;
-  }
+  card.custom = value.custom || card.custom;
+  card.title = value.title || card.title;
+  card.description = value.description || card.description;
+
   if (value.list_id) {
     delete state.boards[board.id].lists[list.id].cards[card.id];
     list.id = value.list_id;

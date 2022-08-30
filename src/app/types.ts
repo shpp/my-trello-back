@@ -23,6 +23,7 @@ export interface Board {
   lists: {
     [id: number]: List;
   };
+  custom?: any;
 }
 
 export interface User {
@@ -48,6 +49,7 @@ export interface Card {
   users: number[];
   created_at: number;
   position: number;
+  custom?: any;
 }
 
 export interface RequestParams {
