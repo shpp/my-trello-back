@@ -17,6 +17,7 @@ import {
   deleteList,
   getBoard,
   getBoards,
+  getBoardUser,
   getUsers,
   login,
   notFound,
@@ -36,6 +37,7 @@ setupRouting(async (router: Router) => {
   router.post(`${prefix}/board`, createBoard);
   router.put(`${prefix}/board/:board_id`, changeBoard);
   router.delete(`${prefix}/board/:board_id`, deleteBoard);
+  router.get(`${prefix}/board/:board_id/user/:user_id`, getBoardUser);
 
   router.post(`${prefix}/board/:board_id/list`, createList);
   router.put(`${prefix}/board/:board_id/list`, changeListPosition);

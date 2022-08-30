@@ -7,7 +7,7 @@ import { CustomError } from './custom-error';
 import { SchemaMap } from 'joi';
 
 export async function notFound(): Promise<Response> {
-  return new Response(JSON.stringify({ error: { message: 'Not found' } }), { status: 404 });
+  return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 }
 
 export async function createUser(req: CfRequest): Promise<Response> {
@@ -31,27 +31,29 @@ export async function createUser(req: CfRequest): Promise<Response> {
   if (
     Object.values(state.users).filter((u) => u.username === newUser.username || u.email === newUser.email).length > 0
   ) {
-    throw new CustomError('Username already exists', 400);
+    throw new CustomError('User already exists', 400);
   }
 
   state.users[newUser.id] = newUser;
   await saveState(params.developerId, state);
 
-  const accessToken = await createAccessToken(newUser);
-  const refreshToken = await createRefreshToken(newUser);
+  //  const accessToken = await createAccessToken(newUser);
+  //  const refreshToken = await createRefreshToken(newUser);
 
   return new Response(
     JSON.stringify({
       result: 'Created',
       id: newUser.id,
-      accessToken,
-      refreshToken,
-    })
+      //      accessToken,
+      //      refreshToken,
+    }),
+    {
+      status: 201,
+    }
   );
 }
 
 export async function getUsers(req: CfRequest): Promise<Response> {
-  await getAuthUser(req);
   const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate({ emailOrUsername: T.string().required() }, req.query);
   const state = await getState(params.developerId);
@@ -67,55 +69,49 @@ export async function login(req: CfRequest): Promise<Response> {
   const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate(
     {
-      email: T.string().email({ tlds: { allow: false } }),
-      password: T.string(),
+      email: T.string()
+        .email({ tlds: { allow: false } })
+        .required(),
+      password: T.string().required(),
     },
     await req.json()
   );
 
   const state = await getState(params.developerId);
   const userArray = Object.values(state.users).filter((u) => u.email === value.email);
+
   if (userArray.length === 0) {
-    throw new CustomError('User not found', 404);
+    throw new CustomError('Unauthorized', 401);
   }
 
   const user = userArray[0];
+
   if (user.password !== value.password) {
-    throw new CustomError('Wrong password', 400);
+    throw new CustomError('Unauthorized', 401);
   }
+
   const accessToken = await createAccessToken(user);
   const refreshToken = await createRefreshToken(user);
 
   return new Response(
     JSON.stringify({
       result: 'Authorized',
-      id: user.id,
-      accessToken,
+      token: accessToken,
       refreshToken,
     })
   );
 }
 
 export async function refresh(req: CfRequest): Promise<Response> {
-  const params = getParamsFromRequest(req, ['developer_id']);
   const value = validate({ refreshToken: T.string() }, await req.json());
   const decodedUser = await getUserFromRefreshToken(value.refreshToken);
-  const state = await getState(params.developerId);
-  const userArray = Object.values(state.users).filter((u: User) => u.email === decodedUser.email);
-
-  if (userArray.length === 0) {
-    throw new CustomError('User not found', 404);
-  }
-
-  const user = userArray[0];
-  const accessToken = await createAccessToken(user);
-  const refreshToken = await createRefreshToken(user);
+  const accessToken = await createAccessToken(decodedUser);
+  const refreshToken = await createRefreshToken(decodedUser);
 
   return new Response(
     JSON.stringify({
       result: 'Authorized',
-      id: user.id,
-      accessToken,
+      token: accessToken,
       refreshToken,
     })
   );
@@ -125,11 +121,11 @@ export async function getBoards(req: CfRequest): Promise<Response> {
   const user = await getAuthUser(req);
   const params = getParamsFromRequest(req, ['developer_id']);
   const state = await getState(params.developerId);
-  const res = Object.values(state.boards).filter((b) => b.users.filter((obj) => user.id === obj.id).length);
+  const res = Object.values(state.boards).filter((b) => b.users.filter((u) => user.id === u.id).length);
 
   return new Response(
     JSON.stringify({
-      boards: res.map((x) => ({ id: x.id, title: x.title })),
+      boards: res.map((b) => ({ id: b.id, title: b.title })),
     })
   );
 }
@@ -158,7 +154,10 @@ export async function createBoard(req: CfRequest): Promise<Response> {
     JSON.stringify({
       result: 'Created',
       id: board.id,
-    })
+    }),
+    {
+      status: 201,
+    }
   );
 }
 
@@ -219,8 +218,46 @@ export async function getBoard(req: CfRequest): Promise<Response> {
   return new Response(
     JSON.stringify({
       title: board.title,
-      users: board.users.map((obj) => ({ id: obj.id, username: obj.username })),
-      lists: board.lists,
+      users: board.users.map((u) => ({ id: u.id, username: u.username })),
+      lists: Object.values(board.lists)
+        .map((l) => ({
+          id: l.id,
+          title: l.title,
+          position: l.position,
+          cards: Object.values(l.cards)
+            .map((c) => ({
+              id: c.id,
+              title: c.title,
+              description: c.description,
+              position: c.position,
+              users: c.users,
+            }))
+            .sort((a, b) => {
+              return a.position - b.position;
+            }),
+        }))
+        .sort((a, b) => {
+          return a.position - b.position;
+        }),
+    })
+  );
+}
+
+export async function getBoardUser(req: CfRequest): Promise<Response> {
+  const user = await getAuthUser(req);
+  const params = getParamsFromRequest(req, ['developer_id', 'board_id', 'user_id']);
+  const state = await getState(params.developerId);
+  const board = getBoardState(state, user.id, +params.boardId);
+  const users = board.users.filter((u) => u.id === +params.userId);
+
+  if (users.length === 0) {
+    throw new CustomError('User not found', 404);
+  }
+
+  return new Response(
+    JSON.stringify({
+      id: users[0].id,
+      username: users[0].username,
     })
   );
 }
@@ -252,7 +289,11 @@ export async function createList(req: CfRequest): Promise<Response> {
   return new Response(
     JSON.stringify({
       result: 'Created',
-    })
+      id: newList.id,
+    }),
+    {
+      status: 201,
+    }
   );
 }
 
@@ -381,7 +422,10 @@ export async function createCard(req: CfRequest): Promise<Response> {
     JSON.stringify({
       result: 'Created',
       id: newCard.id,
-    })
+    }),
+    {
+      status: 201,
+    }
   );
 }
 
@@ -529,7 +573,7 @@ function validate(schema: SchemaMap, data: any): any {
   const { value, error } = T.object(schema).validate(data);
 
   if (error) {
-    throw new CustomError('Wrong data', 400);
+    throw new CustomError(error.message, 400);
   }
 
   return value;
@@ -546,7 +590,11 @@ function findCardsList(board: Board, cardId: number): List {
 function getBoardState(state: DeveloperEnvironmentState, userId: number, boardId: number): Board {
   const board = state.boards[boardId];
 
-  if (!board.users.filter((u) => u.id === userId)) {
+  if (!board) {
+    throw new CustomError('Board not found', 404);
+  }
+
+  if (board.users.filter((u) => u.id === userId).length === 0) {
     throw new CustomError('Forbidden', 403);
   }
 
@@ -560,6 +608,7 @@ function getParamsFromRequest(req: CfRequest, paramsName: string[]): RequestPara
     board_id: 'boardId',
     list_id: 'listId',
     card_id: 'cardId',
+    user_id: 'userId',
   };
 
   paramsName.forEach((name) => {

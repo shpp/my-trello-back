@@ -2,6 +2,7 @@ import { CfRequest } from '../utils/types';
 import { User } from './types';
 import { CustomError } from './custom-error';
 import jwt from '@tsndr/cloudflare-worker-jwt';
+import { getState } from './state';
 
 declare global {
   const ACCESS_TOKEN_SECRET: string;
@@ -9,7 +10,7 @@ declare global {
 }
 
 export async function createAccessToken(payload: any): Promise<string> {
-  payload['exp'] = Math.floor(Date.now() / 1000) + 5 * 60; // expires: now + 5 min
+  payload['exp'] = Math.floor(Date.now() / 1000) + 60 * 60; // expires: now + 60 min
   return jwt.sign(payload, ACCESS_TOKEN_SECRET);
 }
 
@@ -24,6 +25,24 @@ export async function getAuthUser(req: CfRequest): Promise<User> {
 
   if (!authToken) {
     throw new CustomError('Unauthorized', 401);
+  }
+
+  // hack for hardcode token
+  if (authToken === '123') {
+    const developerId = req.params?.developer_id;
+
+    if (!developerId) {
+      throw new CustomError('Parameter developer_id is missing', 400);
+    }
+
+    const state = await getState(developerId);
+    const users = Object.values(state.users);
+
+    if (users.length === 0) {
+      throw new CustomError('Unauthorized', 401);
+    }
+
+    return users[0];
   }
 
   let tokenIsValid = false;
@@ -51,7 +70,7 @@ export async function getUserFromRefreshToken(refreshToken: string): Promise<Use
   }
 
   if (!tokenIsValid) {
-    throw new CustomError('Invalid token', 401);
+    throw new CustomError('Unauthorized', 401);
   }
 
   return jwt.decode(refreshToken) as User;

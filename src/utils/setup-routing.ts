@@ -92,7 +92,7 @@ export function setupRouting(setupRouterFunc: (router: Router) => void): void {
             ctx.captureError(e, { crash: true });
           }
 
-          return new Response(JSON.stringify({ error: { status: e.statusCode || 500, message: e.message } }), {
+          return new Response(JSON.stringify({ error: e.message }), {
             status: e.statusCode || 500,
             headers: getHeaders(),
           });
