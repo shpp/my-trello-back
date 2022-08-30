@@ -222,6 +222,7 @@ export async function getBoard(req: CfRequest): Promise<Response> {
               id: c.id,
               title: c.title,
               description: c.description,
+              color: c.color,
               position: c.position,
               users: c.users,
               custom: c.custom,
@@ -390,6 +391,7 @@ export async function createCard(req: CfRequest): Promise<Response> {
       title: T.string().required(),
       list_id: T.number().required(),
       description: T.string(),
+      color: T.string(),
       custom: T.any(),
     },
     data
@@ -410,6 +412,7 @@ export async function createCard(req: CfRequest): Promise<Response> {
     users: [],
     created_at: Date.now(),
     position: value.position,
+    color: value.color,
     custom: value.custom,
   };
 
@@ -436,6 +439,7 @@ export async function changeCard(req: CfRequest): Promise<Response> {
       list_id: T.number().integer().required(),
       title: T.string(),
       description: T.string(),
+      color: T.string(),
       custom: T.any(),
     },
     data
@@ -458,6 +462,7 @@ export async function changeCard(req: CfRequest): Promise<Response> {
   card.custom = value.custom || card.custom;
   card.title = value.title || card.title;
   card.description = value.description || card.description;
+  card.color = value.color || card.color;
 
   if (value.list_id) {
     delete state.boards[board.id].lists[list.id].cards[card.id];

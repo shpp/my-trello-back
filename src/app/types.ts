@@ -46,6 +46,7 @@ export interface Card {
   id: number;
   title: string;
   description: string;
+  color?: string;
   users: number[];
   created_at: number;
   position: number;
