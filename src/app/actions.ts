@@ -17,7 +17,7 @@ export async function createUser(req: CfRequest): Promise<Response> {
       email: T.string()
         .email({ tlds: { allow: false } })
         .required(),
-      password: T.string().required(),
+      password: T.string().min(4).required(),
     },
     await req.json()
   );
@@ -75,7 +75,7 @@ export async function login(req: CfRequest): Promise<Response> {
       email: T.string()
         .email({ tlds: { allow: false } })
         .required(),
-      password: T.string().required(),
+      password: T.string().min(4).required(),
     },
     await req.json()
   );

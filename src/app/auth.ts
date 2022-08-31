@@ -29,20 +29,12 @@ export async function getAuthUser(req: CfRequest): Promise<User> {
 
   // hack for hardcode token
   if (authToken === '123') {
-    const developerId = req.params?.developer_id;
-
-    if (!developerId) {
-      throw new CustomError('Parameter developer_id is missing', 400);
-    }
-
-    const state = await getState(developerId);
-    const users = Object.values(state.users);
-
-    if (users.length === 0) {
-      throw new CustomError('Unauthorized', 401);
-    }
-
-    return users[0];
+    return {
+      id: 1,
+      email: 'anonymous@email.com',
+      username: 'anonymous',
+      password: '',
+    };
   }
 
   let tokenIsValid = false;
