@@ -71,7 +71,8 @@ export function setupRouting(setupRouterFunc: (router: Router) => void): void {
           version: new Date(buildMetadata.time).toISOString(),
           ...(sentryId ? { debugId: sentryId } : {}),
           ...ctx.additionalResponseHeaders,
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': 'http://localhost:3000',
+          'Access-Control-Allow-Credentials': 'true',
           'Access-Control-Allow-Methods': 'GET,HEAD,PUT,POST,DELETE,OPTIONS',
           'Access-Control-Allow-Headers': 'Origin,X-Requested-With,Content-Type,Accept,Authorization',
         });
