@@ -226,6 +226,7 @@ export async function getBoard(req: CfRequest): Promise<Response> {
               position: c.position,
               users: c.users,
               custom: c.custom,
+              created_at: c.created_at,
             }))
             .sort((a, b) => {
               return a.position - b.position;
