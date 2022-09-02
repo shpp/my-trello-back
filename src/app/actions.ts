@@ -139,7 +139,7 @@ export async function createBoard(req: CfRequest): Promise<Response> {
   const value = validate({ title: T.string().required(), custom: T.any() }, await req.json());
   const state = await getState(params.developerId);
 
-  if (Object.values(state.boards).filter((b) => b.title === value.title).length > 0) {
+  if (Object.values(state.boards).filter((b) => b.title === value.title && b.users[0].id === user.id).length > 0) {
     throw new CustomError('Board already exists', 400);
   }
 
