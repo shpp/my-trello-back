@@ -1,19 +1,28 @@
 name = "my-trello-back"
-type = "javascript"
 compatibility_date = "2021-11-17"
-route=""
+main = "./dist/index.mjs"
+# required for new wrangler to not perform own building which works but no sourcemaps...
+no_bundle = true
+
 required_secrets=["ACCESS_TOKEN_SECRET", "REFRESH_TOKEN_SECRET", "REDIS_TOKEN", "SENTRY_DNS"]
-# NOTE: top-level vars are not inherited/extended
 
 [env.kowospace]
-# get zone_id here: https://dash.cloudflare.com/overview
-zone_id = "8d8480758f960a314adcd3ec9b2f8967"
+# 'unbound' is EXPENSIVE!! 'bundled' is cheap
 usage_model = "bundled"
-
 kv_namespaces = [
-         { binding = "KV", id = "60254b117a9d40d2be797d802eb4182a" }
+         { binding = "KV", id = "60254b117a9d40d2be797d802eb4182a", preview_id = "d83c5d26f8544935886027655cf2f6af" }
 ]
 
-# NOTE: for dns feature of shpp scripts, use "route", not "routes"
-route = "my-trello-back.kowo.space/*"
-vars = { }
+routes = ["my-trello-back.kowo.space/*"]
+
+[env.myworkersdev]
+# override name for beautiful domain, otherwise will be "name-envname"
+name="my-trello-back"
+workers_dev = true
+kv_namespaces = []
+
+[build]
+command = "$deploymode && { [ -z $NPMINSTALL ] || npm install && npm run build; exit $? ; } || echo '...build disabled...'"
+
+[dev]
+port = 6422
