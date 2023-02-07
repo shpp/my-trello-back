@@ -391,7 +391,7 @@ export async function createCard(req: CfRequest): Promise<Response> {
       position: T.number().integer().required(),
       title: T.string().required(),
       list_id: T.number().required(),
-      description: T.string().allow(''),
+      description: T.string(),
       color: T.string(),
       custom: T.any(),
     },
@@ -439,7 +439,7 @@ export async function changeCard(req: CfRequest): Promise<Response> {
     {
       list_id: T.number().integer().required(),
       title: T.string(),
-      description: T.string().allow(''),
+      description: T.string(),
       color: T.string(),
       custom: T.any(),
     },
