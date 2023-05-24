@@ -417,6 +417,16 @@ export async function createCard(req: CfRequest): Promise<Response> {
     custom: value.custom,
   };
 
+  const cards = state.boards[board.id].lists[list.id].cards;
+
+  for (const id in cards) {
+    const card = cards[id];
+    if (card.position >= newCard.position) {
+      card.position++;
+      state.boards[board.id].lists[list.id].cards[id] = card;
+    }
+  }
+
   state.boards[board.id].lists[list.id].cards[newCard.id] = newCard;
   await saveState(params.developerId, state);
 
